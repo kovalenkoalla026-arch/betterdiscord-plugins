@@ -196,14 +196,14 @@ module.exports = (_ => {
                                                     className: "guild-header-counter-item",
                                                     children: [
                                                         BDFDB.ReactUtils.createElement("span", { className: "guild-header-counter-dot online" }),
-                                                        BDFDB.ReactUtils.createElement("span", {}, `${online.toLocaleString()} \u0432 \u0441\u0435\u0442\u0438`)
+                                                        BDFDB.ReactUtils.createElement("span", {}, `${online.toLocaleString()}`)
                                                     ]
                                                 }),
                                                 BDFDB.ReactUtils.createElement("div", {
                                                     className: "guild-header-counter-item",
                                                     children: [
                                                         BDFDB.ReactUtils.createElement("span", { className: "guild-header-counter-dot total" }),
-                                                        BDFDB.ReactUtils.createElement("span", {}, `${total.toLocaleString()} \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432`)
+                                                        BDFDB.ReactUtils.createElement("span", {}, `${total.toLocaleString()}`)
                                                     ]
                                                 })
                                             ]
@@ -228,14 +228,14 @@ module.exports = (_ => {
                                                 className: "guild-header-counter-item",
                                                 children: [
                                                     BDFDB.ReactUtils.createElement("span", { className: "guild-header-counter-dot online" }),
-                                                    BDFDB.ReactUtils.createElement("span", {}, `${online.toLocaleString()} \u0432 \u0441\u0435\u0442\u0438`)
+                                                    BDFDB.ReactUtils.createElement("span", {}, `${online.toLocaleString()}`)
                                                 ]
                                             }),
                                             BDFDB.ReactUtils.createElement("div", {
                                                 className: "guild-header-counter-item",
                                                 children: [
                                                     BDFDB.ReactUtils.createElement("span", { className: "guild-header-counter-dot total" }),
-                                                    BDFDB.ReactUtils.createElement("span", {}, `${total.toLocaleString()} \u0443\u0447\u0430\u0441\u0442\u043d\u0438\u043a\u043e\u0432`)
+                                                    BDFDB.ReactUtils.createElement("span", {}, `${total.toLocaleString()}`)
                                                 ]
                                             })
                                         ]
