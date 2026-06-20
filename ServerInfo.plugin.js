@@ -1,6 +1,6 @@
 /**
  * @name ServerInfo
- * @description \u041f\u043e\u043a\u0430\u0437\u044b\u0432\u0430\u0435\u0442 \u043f\u043e\u0434\u0440\u043e\u0431\u043d\u0443\u044e \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044e \u043e \u0441\u0435\u0440\u0432\u0435\u0440\u0435 (\u043f\u0440\u043e\u0444\u0438\u043b\u044c \u0441\u0435\u0440\u0432\u0435\u0440\u0430) \u0432 \u043a\u0440\u0430\u0441\u0438\u0432\u043e\u043c \u0432\u0441\u043f\u043b\u044b\u0432\u0430\u044e\u0449\u0435\u043c \u043e\u043a\u043d\u0435 \u0432 \u0441\u0442\u0438\u043b\u0435 Vencord.
+ * @description Показывает подробную информацию о сервере (профиль сервера) в красивом всплывающем окне в стиле Vencord.
  * @version 1.0.8
  * @author Antigravity
  * @website https://github.com/vencord/discord-plugins
@@ -32,7 +32,7 @@ function initModules() {
 // React 17/18 compatible renderer
 function renderElement(element, container) {
     if (!ReactDOM) {
-        throw new Error("ReactDOM \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u0432 \u0441\u0438\u0441\u0442\u0435\u043c\u0435.");
+        throw new Error("ReactDOM не найден в системе.");
     }
     
     if (typeof ReactDOM.createRoot === "function") {
@@ -44,7 +44,7 @@ function renderElement(element, container) {
         // React 17 style
         ReactDOM.render(element, container);
     } else {
-        throw new Error("\u041d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d \u043f\u043e\u0434\u0445\u043e\u0434\u044f\u0449\u0438\u0439 \u043c\u0435\u0442\u043e\u0434 \u0440\u0435\u043d\u0434\u0435\u0440\u0438\u043d\u0433\u0430 (render / createRoot).");
+        throw new Error("Не найден подходящий метод рендеринга (render / createRoot).");
     }
 }
 
@@ -281,7 +281,7 @@ function UserRow({ id, guildId, onClick }) {
                 h("div", { className: "server-info-status-dot server-info-status-offline" })
             ),
             h("div", { className: "server-info-row-names" },
-                h("span", { className: "server-info-row-display" }, "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430...")
+                h("span", { className: "server-info-row-display" }, "Загрузка...")
             )
         );
     }
@@ -411,59 +411,59 @@ function ServerInfoModal({ guild, onClose }) {
         const bannerUrl = guild.banner ? `https://cdn.discordapp.com/banners/${guild.id}/${guild.banner}.${isBannerAnimated ? "gif" : "png"}?size=1024` : null;
         
         const tabHeaders = [
-            `\u0418\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u044f`,
-            `\u0414\u0440\u0443\u0437\u044c\u044f (${friends.length})`,
-            `\u0417\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0435 (${blocked.length})`,
-            `\u0418\u0433\u043d\u043e\u0440\u0438\u0440\u0443\u0435\u043c\u044b\u0435 (${ignored.length})`
+            `Информация`,
+            `Друзья (${friends.length})`,
+            `Заблокированные (${blocked.length})`,
+            `Игнорируемые (${ignored.length})`
         ];
         
         const renderTabContent = () => {
             if (currentTab === 0) {
                 const fields = [
                     {
-                        label: "\u0412\u043b\u0430\u0434\u0435\u043b\u0435\u0446 \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
+                        label: "Владелец сервера",
                         value: owner ? h("div", { className: "server-info-owner", onClick: () => openProfile(owner.id, guild.id) },
                             h("img", { className: "server-info-owner-avatar", src: getMemberAvatarURL(guild.id, owner.id, GuildMemberStore?.getMember(guild.id, owner.id), owner, 48) }),
                             h("span", { className: "server-info-owner-name" }, owner.globalName || owner.username)
-                        ) : "\u0417\u0430\u0433\u0440\u0443\u0437\u043a\u0430..."
+                        ) : "Загрузка..."
                     },
                     {
-                        label: "\u0414\u0430\u0442\u0430 \u0441\u043e\u0437\u0434\u0430\u043d\u0438\u044f",
+                        label: "Дата создания",
                         value: formatTimestamp(Number(BigInt(guild.id) >> 22n) + 1420070400000)
                     },
                     {
-                        label: "\u0414\u0430\u0442\u0430 \u0432\u0441\u0442\u0443\u043f\u043b\u0435\u043d\u0438\u044f",
+                        label: "Дата вступления",
                         value: guild.joinedAt ? formatTimestamp(new Date(guild.joinedAt)) : "-"
                     },
                     {
-                        label: "\u041a\u043e\u0440\u043e\u0442\u043a\u0430\u044f \u0441\u0441\u044b\u043b\u043a\u0430",
+                        label: "Короткая ссылка",
                         value: guild.vanityURLCode ? h("a", {
                             href: "#",
                             onClick: (e) => {
                                 e.preventDefault();
                                 BdApi.Clipboard.copy(`https://discord.gg/${guild.vanityURLCode}`);
-                                BdApi.UI.showToast("\u0421\u0441\u044b\u043b\u043a\u0430 \u0441\u043a\u043e\u043f\u0438\u0440\u043e\u0432\u0430\u043d\u0430 \u0432 \u0431\u0443\u0444\u0435\u0440 \u043e\u0431\u043c\u0435\u043d\u0430!", { type: "success" });
+                                BdApi.UI.showToast("Ссылка скопирована в буфер обмена!", { type: "success" });
                             }
                         }, `discord.gg/${guild.vanityURLCode}`) : "-"
                     },
                     {
-                        label: "\u042f\u0437\u044b\u043a \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
+                        label: "Язык сервера",
                         value: guild.preferredLocale || "-"
                     },
                     {
-                        label: "\u0423\u0440\u043e\u0432\u0435\u043d\u044c \u0432\u0435\u0440\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u0438",
-                        value: ["\u041e\u0442\u0441\u0443\u0442\u0441\u0442\u0432\u0443\u0435\u0442", "\u041d\u0438\u0437\u043a\u0438\u0439", "\u0421\u0440\u0435\u0434\u043d\u0438\u0439", "\u0412\u044b\u0441\u043e\u043a\u0438\u0439", "\u041d\u0430\u0438\u0432\u044b\u0441\u0448\u0438\u0439"][guild.verificationLevel] || "?"
+                        label: "Уровень верификации",
+                        value: ["Отсутствует", "Низкий", "Средний", "Высокий", "Наивысший"][guild.verificationLevel] || "?"
                     },
                     {
-                        label: "\u0411\u0443\u0441\u0442\u044b \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
-                        value: `${guild.premiumSubscriberCount ?? 0} (\u0423\u0440\u043e\u0432\u0435\u043d\u044c ${guild.premiumTier ?? 0})`
+                        label: "Бусты сервера",
+                        value: `${guild.premiumSubscriberCount ?? 0} (Уровень ${guild.premiumTier ?? 0})`
                     },
                     {
-                        label: "\u0427\u0438\u0441\u043b\u043e \u043a\u0430\u043d\u0430\u043b\u043e\u0432",
+                        label: "Число каналов",
                         value: String(getChannelsCount(guild.id))
                     },
                     {
-                        label: "\u0427\u0438\u0441\u043b\u043e \u0440\u043e\u043b\u0435\u0439",
+                        label: "Число ролей",
                         value: String(getRolesCount(guild.id))
                     }
                 ];
@@ -480,8 +480,8 @@ function ServerInfoModal({ guild, onClose }) {
                 
                 if (userList.length === 0) {
                     return h("div", { className: "server-info-empty" },
-                        h("div", { className: "server-info-empty-icon" }, listType === "friends" ? "\ud83d\udc65" : listType === "blocked" ? "\ud83d\udeab" : "\ud83d\udd15"),
-                        h("span", {}, listType === "friends" ? "\u041d\u0435\u0442 \u0434\u0440\u0443\u0437\u0435\u0439 \u043d\u0430 \u044d\u0442\u043e\u043c \u0441\u0435\u0440\u0432\u0435\u0440\u0435" : listType === "blocked" ? "\u041d\u0435\u0442 \u0437\u0430\u0431\u043b\u043e\u043a\u0438\u0440\u043e\u0432\u0430\u043d\u043d\u044b\u0445 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439 \u043d\u0430 \u044d\u0442\u043e\u043c \u0441\u0435\u0440\u0432\u0435\u0440\u0435" : "\u041d\u0435\u0442 \u0438\u0433\u043d\u043e\u0440\u0438\u0440\u0443\u0435\u043c\u044b\u0445 \u043f\u043e\u043b\u044c\u0437\u043e\u0432\u0430\u0442\u0435\u043b\u0435\u0439 \u043d\u0430 \u044d\u0442\u043e\u043c \u0441\u0435\u0440\u0432\u0435\u0440\u0435")
+                        h("div", { className: "server-info-empty-icon" }, listType === "friends" ? "👥" : listType === "blocked" ? "🚫" : "🔕"),
+                        h("span", {}, listType === "friends" ? "Нет друзей на этом сервере" : listType === "blocked" ? "Нет заблокированных пользователей на этом сервере" : "Нет игнорируемых пользователей на этом сервере")
                     );
                 }
                 
@@ -502,7 +502,7 @@ function ServerInfoModal({ guild, onClose }) {
         
         return h("div", { className: "server-info-modal-backdrop", onClick: handleBackdropClick },
             h("div", { className: "server-info-modal-card" },
-                h("button", { className: "server-info-close-btn", onClick: onClose }, "\u2715"),
+                h("button", { className: "server-info-close-btn", onClick: onClose }, "✕"),
                 
                 bannerUrl ? h("div", {
                     className: "server-info-banner",
@@ -567,7 +567,7 @@ function ServerInfoModal({ guild, onClose }) {
                 width: "400px"
             } 
         }, 
-            h("h3", {}, "\u041e\u0448\u0438\u0431\u043a\u0430 \u0440\u0435\u043d\u0434\u0435\u0440\u0438\u043d\u0433\u0430 \u043c\u043e\u0434\u0430\u043b\u044c\u043d\u043e\u0433\u043e \u043e\u043a\u043d\u0430"),
+            h("h3", {}, "Ошибка рендеринга модального окна"),
             h("pre", { style: { whiteSpace: "pre-wrap", color: "#dbdee1", fontSize: "11px", overflowX: "auto" } }, err.stack),
             h("button", { 
                 onClick: onClose, 
@@ -580,7 +580,7 @@ function ServerInfoModal({ guild, onClose }) {
                     borderRadius: "4px", 
                     cursor: "pointer" 
                 } 
-            }, "\u0417\u0430\u043a\u0440\u044b\u0442\u044c")
+            }, "Закрыть")
         );
     }
 }
@@ -613,7 +613,7 @@ function openServerInfoModal(guild) {
     } catch (err) {
         console.error("[ServerInfo] Error opening modal:", err);
         if (BdApi && BdApi.UI && typeof BdApi.UI.alert === "function") {
-            BdApi.UI.alert("\u041e\u0448\u0438\u0431\u043a\u0430 \u043f\u043b\u0430\u0433\u0438\u043d\u0430 ServerInfo", `\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u043e\u0442\u043a\u0440\u044b\u0442\u044c \u043e\u043a\u043d\u043e \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438\u0438 \u043e \u0441\u0435\u0440\u0432\u0435\u0440\u0435. \u041e\u0448\u0438\u0431\u043a\u0430: ${err.message}\n\n\u041f\u043e\u0436\u0430\u043b\u0443\u0439\u0441\u0442\u0430, \u043e\u0442\u043a\u0440\u043e\u0439\u0442\u0435 \u043a\u043e\u043d\u0441\u043e\u043b\u044c \u0440\u0430\u0437\u0440\u0430\u0431\u043e\u0442\u0447\u0438\u043a\u0430 (Ctrl+Shift+I) \u0434\u043b\u044f \u043f\u043e\u0434\u0440\u043e\u0431\u043d\u043e\u0441\u0442\u0435\u0439.`);
+            BdApi.UI.alert("Ошибка плагина ServerInfo", `Не удалось открыть окно информации о сервере. Ошибка: ${err.message}\n\nПожалуйста, откройте консоль разработчика (Ctrl+Shift+I) для подробностей.`);
         }
     }
 }
@@ -1013,7 +1013,7 @@ module.exports = class ServerInfo {
         this.patchContextMenus();
         
         try {
-            BdApi.UI.showToast("\u041f\u043b\u0430\u0433\u0438\u043d ServerInfo \u0443\u0441\u043f\u0435\u0448\u043d\u043e \u0437\u0430\u043f\u0443\u0449\u0435\u043d!", { type: "info" });
+            BdApi.UI.showToast("Плагин ServerInfo успешно запущен!", { type: "info" });
         } catch (e) {}
     }
     
@@ -1065,7 +1065,7 @@ module.exports = class ServerInfo {
                     type: "group",
                     items: [{
                         type: "normal",
-                        label: "\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u0441\u0435\u0440\u0432\u0435\u0440\u0430",
+                        label: "Профиль сервера",
                         id: "server-info-profile",
                         action: () => openServerInfoModal(guild)
                     }]
@@ -1094,8 +1094,8 @@ module.exports = class ServerInfo {
                 } catch (e) {
                     console.error("[ServerInfo] Error in unpatch", e);
                 }
-         
-            this.unpatches = [];
             }
+            this.unpatches = [];
         }
-    };
+    }
+};

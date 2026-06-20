@@ -1,0 +1,6 @@
+mingit/
+mingit.zip
+*.txt
+escape_script.js
+server.js
+upload_to_github.js

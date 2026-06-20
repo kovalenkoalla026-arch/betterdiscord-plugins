@@ -4,11 +4,10 @@ Repository containing custom BetterDiscord plugins:
 
 ## Plugins list
 
-1. **GuildHeaderCounter** ([GuildHeaderCounter.plugin.js](GuildHeaderCounter.plugin.js))
-2.    - Shows the online and total member counts directly below the guild header in the server's channel list.
-      -    - Requires BDFDB library.
-       
-           - 2. **ServerInfo** ([ServerInfo.plugin.js](ServerInfo.plugin.js))
-             3.    - Displays a premium, rich-looking server information modal when clicking "Server Profile" (Profil' servera) in the guild context menu.
-                   -    - Includes list of friends, blocked users, and ignored users on that server.
-                        - 
+1. **BetterGuildTooltip** ([BetterGuildTooltip.plugin.js](BetterGuildTooltip.plugin.js))
+   - Displays both the online and total member count directly in the server tooltip when hovering over a server icon in your server list.
+   - Clean, lightweight, and uses inline styling to ensure stable rendering.
+
+2. **ServerInfo** ([ServerInfo.plugin.js](ServerInfo.plugin.js))
+   - Displays a premium, rich-looking server information modal when clicking "Server Profile" (Профиль сервера) in the guild context menu.
+   - Includes list of friends, blocked users, and ignored users on that server.
