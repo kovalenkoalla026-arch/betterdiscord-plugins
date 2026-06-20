@@ -260,6 +260,49 @@ const findInReactTree = (tree, filter) => {
     return null;
 };
 
+function StatusIcon({ status }) {
+    if (status === "online") {
+        return h("svg", {
+            width: "14",
+            height: "14",
+            viewBox: "0 0 16 16",
+            className: "server-info-status-svg"
+        }, h("circle", { cx: "8", cy: "8", r: "8", fill: "#23a55a" }));
+    }
+    if (status === "idle") {
+        return h("svg", {
+            width: "14",
+            height: "14",
+            viewBox: "0 0 16 16",
+            className: "server-info-status-svg"
+        }, h("path", {
+            d: "M14.8 11.23a6 6 0 1 1-3.85-10.45 7.5 7.5 0 0 0 3.85 10.45z",
+            fill: "#f0b232"
+        }));
+    }
+    if (status === "dnd") {
+        return h("svg", {
+            width: "14",
+            height: "14",
+            viewBox: "0 0 16 16",
+            className: "server-info-status-svg"
+        }, h("path", {
+            d: "M8 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8zm4 9.5H4v-3h8z",
+            fill: "#f23f43"
+        }));
+    }
+    // offline / invisible
+    return h("svg", {
+        width: "14",
+        height: "14",
+        viewBox: "0 0 16 16",
+        className: "server-info-status-svg"
+    }, h("path", {
+        d: "M8 0a8 8 0 1 0 8 8 8 8 0 0 0-8-8zm0 13a5 5 0 1 1 5-5 5 5 0 0 1-5 5z",
+        fill: "#80848e"
+    }));
+}
+
 function UserRow({ id, guildId, onClick }) {
     const [, forceUpdate] = React.useState({});
     const user = UserStore ? UserStore.getUser(id) : null;
@@ -278,7 +321,7 @@ function UserRow({ id, guildId, onClick }) {
         return h("div", { className: "server-info-row" },
             h("div", { className: "server-info-avatar-wrapper" },
                 h("div", { className: "server-info-avatar server-info-avatar-placeholder" }),
-                h("div", { className: "server-info-status-dot server-info-status-offline" })
+                h(StatusIcon, { status: "offline" })
             ),
             h("div", { className: "server-info-row-names" },
                 h("span", { className: "server-info-row-display" }, "Загрузка...")
@@ -293,7 +336,7 @@ function UserRow({ id, guildId, onClick }) {
     return h("div", { className: "server-info-row", onClick: () => onClick(id, guildId) },
         h("div", { className: "server-info-avatar-wrapper" },
             h("img", { className: "server-info-avatar", src: avatarUrl }),
-            h("div", { className: `server-info-status-dot server-info-status-${presence}` })
+            h(StatusIcon, { status: presence })
         ),
         h("div", { className: "server-info-row-names" },
             h("span", { className: "server-info-row-display" }, displayName),
@@ -310,16 +353,46 @@ function ServerInfoModal({ guild, onClose }) {
     
     React.useEffect(() => {
         if (guild.ownerId) {
-            const cached = UserStore ? UserStore.getUser(guild.ownerId) : null;
-            if (cached) {
-                setOwner(cached);
+            let foundOwner = null;
+            if (UserStore) foundOwner = UserStore.getUser(guild.ownerId);
+            if (!foundOwner && GuildMemberStore) {
+                const member = GuildMemberStore.getMember(guild.id, guild.ownerId);
+                if (member && member.user) foundOwner = member.user;
+            }
+            
+            if (foundOwner) {
+                setOwner(foundOwner);
             } else {
+                if (FluxDispatcher) {
+                    try {
+                        FluxDispatcher.dispatch({
+                            type: "GUILD_MEMBERS_REQUEST",
+                            guildIds: [guild.id],
+                            userIds: [guild.ownerId]
+                        });
+                    } catch (e) {
+                        console.error("[ServerInfo] Error requesting owner member", e);
+                    }
+                }
+                
                 fetchUser(guild.ownerId).then(user => {
-                    if (user) setOwner(user);
+                    if (user) {
+                        setOwner(user);
+                    } else {
+                        const doubleCheck = UserStore ? UserStore.getUser(guild.ownerId) : null;
+                        if (!doubleCheck) {
+                            setOwner({
+                                id: guild.ownerId,
+                                username: `ID: ${guild.ownerId}`,
+                                globalName: `Владелец (ID: ${guild.ownerId})`,
+                                avatar: null
+                            });
+                        }
+                    }
                 });
             }
         }
-    }, [guild.ownerId]);
+    }, [guild.ownerId, guild.id]);
     
     React.useEffect(() => {
         if (!RelationshipStore || !FluxDispatcher) return;
@@ -390,7 +463,11 @@ function ServerInfoModal({ guild, onClose }) {
                 console.error("[ServerInfo] Error resolving raw ids for " + type, e);
             }
             
+            const currentUser = UserStore ? UserStore.getCurrentUser() : null;
+            const currentUserId = currentUser ? currentUser.id : null;
+            
             return ids.filter(id => {
+                if (currentUserId && id === currentUserId) return false;
                 try {
                     return (GuildMemberStore.isMember && GuildMemberStore.isMember(guild.id, id)) || 
                            (GuildMemberStore.getMember && GuildMemberStore.getMember(guild.id, id));
@@ -562,7 +639,7 @@ function ServerInfoModal({ guild, onClose }) {
                 color: "#f23f43", 
                 padding: "20px", 
                 borderRadius: "8px", 
-                zIndex: 10006,
+                zIndex: 999,
                 boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
                 width: "400px"
             } 
@@ -630,7 +707,7 @@ const CSS_CONTENT = `
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 10005;
+    z-index: 999;
     animation: server-info-fade-in 0.2s ease-out;
 }
 
@@ -917,19 +994,18 @@ const CSS_CONTENT = `
     50% { opacity: 0.3; }
     100% { opacity: 0.6; }
 }
-.server-info-status-dot {
+.server-info-status-svg {
     position: absolute;
-    bottom: -2px;
-    right: -2px;
-    width: 12px;
-    height: 12px;
+    bottom: -3px;
+    right: -3px;
+    background: #2b2d31;
     border-radius: 50%;
-    border: 2px solid #2b2d31;
+    padding: 2px;
+    transition: background-color 0.2s;
 }
-.server-info-status-online { background-color: #23a55a; }
-.server-info-status-idle { background-color: #f0b232; }
-.server-info-status-dnd { background-color: #f23f43; }
-.server-info-status-offline { background-color: #80848e; }
+.server-info-row:hover .server-info-status-svg {
+    background: #313338;
+}
 
 .server-info-row-names {
     display: flex;
@@ -968,7 +1044,7 @@ const CSS_CONTENT = `
     right: 0;
     bottom: 0;
     background: rgba(0, 0, 0, 0.9);
-    z-index: 10010;
+    z-index: 1001;
     display: flex;
     align-items: center;
     justify-content: center;
