@@ -2,7 +2,7 @@
  * @name BypassDND
  * @author senkih
  * @description Bypasses Do Not Disturb (DND) status locally so you still receive notifications and incoming calls.
- * @version 2.2.0
+ * @version 2.2.4
  * @website https://github.com/kovalenkoalla026-arch/betterdiscord-plugins
  * @source https://github.com/kovalenkoalla026-arch/betterdiscord-plugins/blob/main/BypassDND.plugin.js
  */
@@ -75,7 +75,7 @@ class BypassDND {
   getCurrentUserId() {
     if (this.cachedCurrentUserId) return this.cachedCurrentUserId;
     try {
-      const UserStore = BdApi.Webpack.getModule(m => (m.getCurrentUser && m.getUser) || (m.default && m.default.getCurrentUser && m.default.getUser));
+      const UserStore = BdApi.Webpack.getStore("UserStore") || BdApi.Webpack.getModule(m => (m.getCurrentUser && m.getUser) || (m.default && m.default.getCurrentUser && m.default.getUser));
       const currentUser = UserStore?.getCurrentUser?.() || UserStore?.default?.getCurrentUser?.();
       if (currentUser) {
         this.cachedCurrentUserId = currentUser.id;
@@ -89,8 +89,10 @@ class BypassDND {
 
   patchStatusAndNotificationModules() {
     try {
-      let SelfPresenceStore = BdApi.Webpack.getModule(m => m.getName && m.getName() === "SelfPresenceStore" || (m.default && m.default.getName && m.default.getName() === "SelfPresenceStore"));
-      let UserStatusStore = BdApi.Webpack.getModule(m => (m.getStatus && m.isMobileOnline) || (m.default && m.default.getStatus && m.default.isMobileOnline));
+      let SelfPresenceStore = BdApi.Webpack.getStore("SelfPresenceStore") || BdApi.Webpack.getModule(m => m.getName && m.getName() === "SelfPresenceStore" || (m.default && m.default.getName && m.default.getName() === "SelfPresenceStore"));
+      let UserStatusStore = BdApi.Webpack.getStore("UserStatusStore") || BdApi.Webpack.getModule(m => (m.getStatus && m.isMobileOnline) || (m.default && m.default.getStatus && m.default.isMobileOnline));
+      let PresenceStore = BdApi.Webpack.getStore("PresenceStore") || BdApi.Webpack.getModule(m => m.getName && m.getName() === "PresenceStore" || (m.default && m.default.getName && m.default.getName() === "PresenceStore"));
+
       let NotificationCheckModule = BdApi.Webpack.getModule(m => {
         for (const key in m) {
           if (typeof m[key] === "function") {
@@ -103,7 +105,7 @@ class BypassDND {
         return false;
       });
 
-      const shouldBypass = (res) => {
+      const shouldBypass = (res, args) => {
         const isDnd = res === "dnd";
         const isIdle = res === "idle";
         
@@ -141,7 +143,7 @@ class BypassDND {
           if (!target || typeof target.getStatus !== "function") return;
           BdApi.Patcher.instead(this.meta.name, target, "getStatus", (thisObject, args, originalMethod) => {
             const res = originalMethod.apply(thisObject, args);
-            if (shouldBypass(res)) {
+            if (shouldBypass(res, args)) {
               return "online";
             }
             return res;
@@ -166,7 +168,7 @@ class BypassDND {
             const currentUserId = this.getCurrentUserId();
             
             if (userId && currentUserId && userId === currentUserId) {
-              if (shouldBypass(res)) {
+              if (shouldBypass(res, args)) {
                 return "online";
               }
             }
@@ -179,6 +181,32 @@ class BypassDND {
         if (UserStatusStore.default) {
           patchUserStatus(UserStatusStore.default);
           patchUserStatus(Object.getPrototypeOf(UserStatusStore.default));
+        }
+      }
+
+      // Patch PresenceStore getStatus
+      if (PresenceStore) {
+        const patchPresenceStatus = (target) => {
+          if (!target || typeof target.getStatus !== "function") return;
+          BdApi.Patcher.instead(this.meta.name, target, "getStatus", (thisObject, args, originalMethod) => {
+            const res = originalMethod.apply(thisObject, args);
+            const userId = args[0];
+            const currentUserId = this.getCurrentUserId();
+            
+            if (userId && currentUserId && userId === currentUserId) {
+              if (shouldBypass(res, args)) {
+                return "online";
+              }
+            }
+            return res;
+          });
+        };
+
+        patchPresenceStatus(PresenceStore);
+        patchPresenceStatus(Object.getPrototypeOf(PresenceStore));
+        if (PresenceStore.default) {
+          patchPresenceStatus(PresenceStore.default);
+          patchPresenceStatus(Object.getPrototypeOf(PresenceStore.default));
         }
       }
 
