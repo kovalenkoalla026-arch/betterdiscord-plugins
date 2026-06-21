@@ -1,7 +1,7 @@
 /**
  * @name BetterGuildTooltip
  * @author DevilBro, senkih
- * @version 1.0.1
+ * @version 9.9.9
  * @description Displays the online and total member count directly in the server tooltip.
  * @invite Jx3TjNS
  */
