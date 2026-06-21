@@ -43,6 +43,7 @@ class BypassDND {
 
     try {
       log("1. Start called");
+
       this.findSyncCallbackNames(log);
       log("2. Calling patchStatusAndNotificationModules");
       this.patchStatusAndNotificationModules(log);

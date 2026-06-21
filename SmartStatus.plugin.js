@@ -41,13 +41,24 @@ class SmartStatus {
     })();
 
     try {
-      this.authToken = this.modules.find(m => m.exports?.default?.getToken?.name === "getToken")?.exports?.default?.getToken() || (() => {
-        let proxy = document.createElement("iframe");
-        document.body.appendChild(proxy);
-        let token = Object.assign({}, proxy.contentWindow).window.localStorage["token"];
-        document.body.removeChild(proxy);
-        return JSON.parse(token);
-      })();
+      const found = this.modules.find(m => {
+        if (!m.exports) return false;
+        if (typeof m.exports.getToken === "function") return true;
+        if (m.exports.default && typeof m.exports.default.getToken === "function") return true;
+        return false;
+      });
+      this.authToken = found ? (found.exports.getToken ? found.exports.getToken() : found.exports.default.getToken()) : null;
+      
+      if (!this.authToken) {
+        // Fallback
+        this.authToken = (() => {
+          let proxy = document.createElement("iframe");
+          document.body.appendChild(proxy);
+          let token = Object.assign({}, proxy.contentWindow).window.localStorage["token"];
+          document.body.removeChild(proxy);
+          return token ? JSON.parse(token) : null;
+        })();
+      }
     } catch(e) {
       console.error("[SmartStatus] Failed to resolve auth token", e);
     }
