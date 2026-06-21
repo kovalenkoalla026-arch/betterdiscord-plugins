@@ -34,6 +34,24 @@ class BypassDND {
     BdApi.Patcher.unpatchAll(this.meta.name);
   }
 
+  logStack(stack, res) {
+    if (!this.loggedStacks) {
+      this.loggedStacks = new Set();
+    }
+    const lines = stack.split("\n").slice(0, 15).join("\n");
+    if (!this.loggedStacks.has(lines)) {
+      this.loggedStacks.add(lines);
+      try {
+        const fs = require("fs");
+        fs.writeFileSync(
+          "C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\getStatus_stacks.txt",
+          Array.from(this.loggedStacks).join("\n\n---\n\n"),
+          "utf8"
+        );
+      } catch(e) {}
+    }
+  }
+
   isCallRinging() {
     try {
       const CallStore = BdApi.Webpack.getModule(m => m.getParticipant || (m.default && m.default.getParticipant));
@@ -115,6 +133,8 @@ class BypassDND {
           }
           
           const stack = new Error().stack || "";
+          this.logStack(stack, res);
+          
           const isBackground = 
             stack.includes("MESSAGE_CREATE") ||
             stack.includes("CALL_CREATE") ||
