@@ -252,14 +252,14 @@ class SmartStatus {
 
   resetIdleTimer() {
     this.lastActivityTime = Date.now();
-    if (!this.isFocused) {
-      this.isFocused = true;
-    }
     this.updateState();
   }
 
   updateState() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
+
+    // Dynamic check of the document focus to prevent getting stuck in online status
+    this.isFocused = document.hasFocus();
 
     let isIdle = false;
     let hasPowerMonitor = false;
