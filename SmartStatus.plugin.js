@@ -255,7 +255,7 @@ class SmartStatus {
     this.updateState();
   }
 
-  updateState() {
+  async updateState() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
 
     // Dynamic check of the document focus to prevent getting stuck in online status
@@ -267,7 +267,9 @@ class SmartStatus {
 
     try {
       if (typeof window !== "undefined" && window.DiscordNative && window.DiscordNative.powerMonitor && typeof window.DiscordNative.powerMonitor.getSystemIdleTimeMs === "function") {
-        systemIdleTime = window.DiscordNative.powerMonitor.getSystemIdleTimeMs() / 1000;
+        const val = window.DiscordNative.powerMonitor.getSystemIdleTimeMs();
+        const ms = (val instanceof Promise) ? await val : val;
+        systemIdleTime = ms / 1000;
         hasPowerMonitor = true;
       } else {
         const electron = require("electron");
