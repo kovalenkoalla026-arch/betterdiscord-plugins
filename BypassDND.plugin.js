@@ -2,7 +2,7 @@
  * @name BypassDND
  * @author senkih
  * @description Bypasses Do Not Disturb (DND) status locally so you still receive notifications and incoming calls.
- * @version 2.1.0
+ * @version 2.2.0
  * @website https://github.com/kovalenkoalla026-arch/betterdiscord-plugins
  * @source https://github.com/kovalenkoalla026-arch/betterdiscord-plugins/blob/main/BypassDND.plugin.js
  */
@@ -28,116 +28,30 @@ class BypassDND {
 
   start() {
     this.patchStatusAndNotificationModules();
-    this.runDiagnostics();
   }
 
   stop() {
     BdApi.Patcher.unpatchAll(this.meta.name);
   }
 
-  logStack(stack, res) {
-    if (!this.loggedStacks) {
-      this.loggedStacks = new Set();
-    }
-    const lines = stack.split("\n").slice(0, 15).join("\n");
-    if (!this.loggedStacks.has(lines)) {
-      this.loggedStacks.add(lines);
-      try {
-        const fs = require("fs");
-        fs.writeFileSync(
-          "C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\getStatus_stacks.txt",
-          Array.from(this.loggedStacks).join("\n\n---\n\n"),
-          "utf8"
-        );
-      } catch(e) {}
-    }
-  }
-
-  runDiagnostics() {
-    try {
-      const fs = require("fs");
-      let m = {};
-      try {
-        webpackChunkdiscord_app.push([[Math.random()], {}, r => { m = r.c || {}; }]);
-      } catch(e) {}
-
-      let found = [];
-      for (const id in m) {
-        const mod = m[id];
-        if (!mod || !mod.exports) continue;
-        const exportsList = [mod.exports, mod.exports.default, Object.getPrototypeOf(mod.exports)].filter(Boolean);
-        for (const exp of exportsList) {
-          try {
-            const str = exp.toString();
-            if (str.includes("call_ringing") || str.includes("ringing") || str.includes("ringtone")) {
-              found.push({ id: id, type: "exports", keys: Object.keys(exp) });
-            }
-          } catch(e) {}
-          try {
-            for (const key in exp) {
-              if (typeof exp[key] === "function") {
-                const str = exp[key].toString();
-                if (str.includes("call_ringing") || str.includes("ringing") || str.includes("ringtone") || str.includes("playSound")) {
-                  found.push({ id: id, key: key, type: "method" });
-                }
-              }
-            }
-          } catch(e) {}
-        }
-      }
-      fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\sound_modules.txt", JSON.stringify(found, null, 2), "utf8");
-    } catch (e) {
-      console.error("[BypassDND Diag] Error running diagnostics:", e);
-    }
-  }
-
   isCallRinging() {
     try {
-      const CallStore = BdApi.Webpack.getModule(m => m.getParticipant || (m.default && m.default.getParticipant));
-      if (!CallStore) return false;
-      const target = CallStore.$$baseObject || CallStore;
-      const channels = target.getChannels();
-      
-      let debugInfo = {
-        hasChannels: !!channels,
-        channelsType: typeof channels,
-        channelsKeys: channels ? Object.keys(channels) : [],
-        channelsDetails: {}
-      };
-
-      if (channels) {
-        const channelIds = Object.keys(channels);
-        for (const channelId of channelIds) {
-          const partsNoArg = target.getMutableParticipants(channelId);
-          const parts0 = target.getMutableParticipants(channelId, 0); 
-          const parts1 = target.getMutableParticipants(channelId, 1);
-          
-          debugInfo.channelsDetails[channelId] = {
-            partsNoArg: partsNoArg,
-            parts0: parts0,
-            parts1: parts1
-          };
+      // 1. Check for incoming calls
+      const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
+      if (IncomingCallStore && typeof IncomingCallStore.hasIncomingCalls === "function") {
+        if (IncomingCallStore.hasIncomingCalls()) {
+          return true;
         }
       }
       
-      const fs = require("fs");
-      fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\call_store_state.txt", JSON.stringify(debugInfo, null, 2), "utf8");
-
-      if (channels) {
-        for (const channelId of Object.keys(channels)) {
-          const lists = [
-            target.getMutableParticipants(channelId),
-            target.getMutableParticipants(channelId, 0),
-            target.getMutableParticipants(channelId, 1)
-          ];
-          for (const list of lists) {
-            if (list) {
-              const arr = Array.isArray(list) ? list : Object.values(list);
-              for (const p of arr) {
-                if (p && p.ringing) {
-                  return true;
-                }
-              }
+      // 2. Check for active/ringing calls in CallStore
+      const CallStore = BdApi.Webpack.getStore("CallStore");
+      if (CallStore && typeof CallStore.getCalls === "function") {
+        const calls = CallStore.getCalls();
+        if (Array.isArray(calls)) {
+          for (const call of calls) {
+            if (call && call.ringing && call.ringing.length > 0) {
+              return true;
             }
           }
         }
@@ -175,7 +89,6 @@ class BypassDND {
 
   patchStatusAndNotificationModules() {
     try {
-      // 1. Resolve webpack modules using BdApi.Webpack
       let SelfPresenceStore = BdApi.Webpack.getModule(m => m.getName && m.getName() === "SelfPresenceStore" || (m.default && m.default.getName && m.default.getName() === "SelfPresenceStore"));
       let UserStatusStore = BdApi.Webpack.getModule(m => (m.getStatus && m.isMobileOnline) || (m.default && m.default.getStatus && m.default.isMobileOnline));
       let NotificationCheckModule = BdApi.Webpack.getModule(m => {
@@ -200,52 +113,10 @@ class BypassDND {
           }
           
           if (this.isCallRinging()) {
-            try {
-              let webpackRequire;
-              webpackChunkdiscord_app.push([[Math.random()], {}, r => { webpackRequire = r; }]);
-              if (webpackRequire && webpackRequire.m) {
-                const fs = require("fs");
-                if (webpackRequire.m["470214"]) {
-                  fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\mod_470214.txt", webpackRequire.m["470214"].toString(), "utf8");
-                }
-                if (webpackRequire.m["561753"]) {
-                  fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\mod_561753.txt", webpackRequire.m["561753"].toString(), "utf8");
-                }
-                
-                let m = webpackRequire.c || {};
-                let found = [];
-                for (const id in m) {
-                  const mod = m[id];
-                  if (!mod || !mod.exports) continue;
-                  const exportsList = [mod.exports, mod.exports.default, Object.getPrototypeOf(mod.exports)].filter(Boolean);
-                  for (const exp of exportsList) {
-                    try {
-                      const str = exp.toString();
-                      if (str.includes("call_ringing") || str.includes("ringing") || str.includes("ringtone")) {
-                        found.push({ id: id, type: "exports", keys: Object.keys(exp) });
-                      }
-                    } catch(e) {}
-                    try {
-                      for (const key in exp) {
-                        if (typeof exp[key] === "function") {
-                          const str = exp[key].toString();
-                          if (str.includes("call_ringing") || str.includes("ringing") || str.includes("ringtone") || str.includes("playSound")) {
-                            found.push({ id: id, key: key, type: "method" });
-                          }
-                        }
-                      }
-                    } catch(e) {}
-                  }
-                }
-                fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\sound_modules_ringing.json", JSON.stringify(found, null, 2), "utf8");
-              }
-            } catch(e) {}
             return true;
           }
           
           const stack = new Error().stack || "";
-          this.logStack(stack, res);
-          
           const isBackground = 
             stack.includes("MESSAGE_CREATE") ||
             stack.includes("CALL_CREATE") ||
@@ -264,7 +135,7 @@ class BypassDND {
         return false;
       };
 
-      // 2. Patch SelfPresenceStore getStatus
+      // Patch SelfPresenceStore getStatus
       if (SelfPresenceStore) {
         const patchSelfPresenceStatus = (target) => {
           if (!target || typeof target.getStatus !== "function") return;
@@ -283,12 +154,9 @@ class BypassDND {
           patchSelfPresenceStatus(SelfPresenceStore.default);
           patchSelfPresenceStatus(Object.getPrototypeOf(SelfPresenceStore.default));
         }
-        console.log("[BypassDND] SelfPresenceStore patch applied.");
-      } else {
-        console.error("[BypassDND] SelfPresenceStore not found!");
       }
 
-      // 3. Patch UserStatusStore getStatus
+      // Patch UserStatusStore getStatus
       if (UserStatusStore) {
         const patchUserStatus = (target) => {
           if (!target || typeof target.getStatus !== "function") return;
@@ -312,12 +180,9 @@ class BypassDND {
           patchUserStatus(UserStatusStore.default);
           patchUserStatus(Object.getPrototypeOf(UserStatusStore.default));
         }
-        console.log("[BypassDND] UserStatusStore patch applied.");
-      } else {
-        console.error("[BypassDND] UserStatusStore not found!");
       }
 
-      // 4. Patch Notification Check Module
+      // Patch Notification Check Module
       if (NotificationCheckModule) {
         let notifyCheckKey = null;
         for (const key in NotificationCheckModule) {
@@ -332,24 +197,18 @@ class BypassDND {
 
         if (notifyCheckKey) {
           BdApi.Patcher.before(this.meta.name, NotificationCheckModule, notifyCheckKey, (thisObject, args) => {
-            // args[3] is options object
             if (!args[3]) {
               args[3] = {};
             }
             args[3].ignoreStatus = true;
           });
-          console.log("[BypassDND] Notification check function patched.");
-        } else {
-          console.error("[BypassDND] Notification check key not found in module!");
         }
-      } else {
-        console.error("[BypassDND] NotificationCheckModule not found!");
       }
 
-      this.showToast(`BypassDND успешно запущен и работает!`, { type: "success" });
+      this.showToast(`BypassDND запущен!`, { type: "success" });
     } catch (e) {
       console.error(`[${this.meta.name}] Start error:`, e);
-      this.showToast(`Критическая ошибка при запуске.`, { type: "error" });
+      this.showToast(`Ошибка при запуске BypassDND.`, { type: "error" });
     }
   }
 
