@@ -28,6 +28,7 @@ class BypassDND {
 
   start() {
     this.patchStatusAndNotificationModules();
+    this.runDiagnostics();
   }
 
   stop() {
@@ -49,6 +50,37 @@ class BypassDND {
           "utf8"
         );
       } catch(e) {}
+    }
+  }
+
+  runDiagnostics() {
+    try {
+      const fs = require("fs");
+      let m = {};
+      try {
+        webpackChunkdiscord_app.push([[Math.random()], {}, r => { m = r.c || {}; }]);
+      } catch(e) {}
+
+      let found = [];
+      for (const id in m) {
+        const mod = m[id];
+        if (!mod || !mod.exports) continue;
+        const exportsList = [mod.exports, mod.exports.default, Object.getPrototypeOf(mod.exports)].filter(Boolean);
+        for (const exp of exportsList) {
+          try {
+            if (exp && typeof exp.start === "function") {
+              found.push({
+                id: id,
+                keys: Object.keys(exp),
+                hasStart: true
+              });
+            }
+          } catch(e) {}
+        }
+      }
+      fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\start_modules.txt", JSON.stringify(found, null, 2), "utf8");
+    } catch (e) {
+      console.error("[BypassDND Diag] Error running diagnostics:", e);
     }
   }
 
@@ -134,6 +166,20 @@ class BypassDND {
           
           const stack = new Error().stack || "";
           this.logStack(stack, res);
+
+          try {
+            let webpackRequire;
+            webpackChunkdiscord_app.push([[Math.random()], {}, r => { webpackRequire = r; }]);
+            if (webpackRequire && webpackRequire.m) {
+              const fs = require("fs");
+              if (webpackRequire.m["470214"] && !fs.existsSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\mod_470214.txt")) {
+                fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\mod_470214.txt", webpackRequire.m["470214"].toString(), "utf8");
+              }
+              if (webpackRequire.m["561753"] && !fs.existsSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\mod_561753.txt")) {
+                fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\mod_561753.txt", webpackRequire.m["561753"].toString(), "utf8");
+              }
+            }
+          } catch(e) {}
           
           const isBackground = 
             stack.includes("MESSAGE_CREATE") ||
