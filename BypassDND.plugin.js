@@ -47,6 +47,10 @@ class BypassDND {
       log("2. Calling patchStatusAndNotificationModules");
       this.patchStatusAndNotificationModules(log);
       log("3. Finished patchStatusAndNotificationModules");
+      
+      log("4. Calling forceSyncIncomingCallStore");
+      this.forceSyncIncomingCallStore(log);
+      log("5. Finished forceSyncIncomingCallStore");
     } catch(e) {
       log("CRITICAL START ERROR: " + e.stack);
     }
@@ -59,15 +63,35 @@ class BypassDND {
   findSyncCallbackNames(log) {
     try {
       const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
-      if (!IncomingCallStore) return;
+      if (!IncomingCallStore) {
+        log("IncomingCallStore not found");
+        return;
+      }
       
+      log("IncomingCallStore prototype keys: " + Object.getOwnPropertyNames(Object.getPrototypeOf(IncomingCallStore)).join(", "));
+      log("IncomingCallStore keys: " + Object.keys(IncomingCallStore).join(", "));
+      
+      if (IncomingCallStore._syncWiths && Array.isArray(IncomingCallStore._syncWiths)) {
+        log(`IncomingCallStore has ${IncomingCallStore._syncWiths.length} _syncWiths`);
+        IncomingCallStore._syncWiths.forEach((sw, idx) => {
+          const targetStoreName = sw.store ? (sw.store.getName ? sw.store.getName() : (sw.store.constructor ? sw.store.constructor.name : "Unknown")) : "None";
+          const funcName = sw.func ? sw.func.name : "anonymous";
+          const funcStr = sw.func ? sw.func.toString().substring(0, 500) : "undefined";
+          log(`_syncWiths[${idx}]: store=${targetStoreName}, funcName=${funcName}, funcStr=${funcStr}`);
+          if (funcName && funcName.length <= 3) {
+            this.syncCallbackNames.push(funcName);
+          }
+        });
+      }
+
+      // Also do the global scanning as a fallback/additional safety
       const modules = BdApi.Webpack.getModule(() => true, { first: false }) || [];
       modules.forEach(m => {
         const checkStore = (s) => {
           if (s && s._syncWiths && Array.isArray(s._syncWiths)) {
             s._syncWiths.forEach((sw) => {
               if (sw.store === IncomingCallStore && sw.func && sw.func.name) {
-                log(`Found sync callback name: ${sw.func.name} in store ${s.getName ? s.getName() : "Unknown"}`);
+                log(`Found sync callback name in other store: ${sw.func.name} in store ${s.getName ? s.getName() : "Unknown"}`);
                 this.syncCallbackNames.push(sw.func.name);
               }
             });
@@ -84,6 +108,49 @@ class BypassDND {
       log("Final sync callback names: " + JSON.stringify(this.syncCallbackNames));
     } catch(err) {
       log("Error finding sync callback names: " + err.stack);
+    }
+  }
+
+  forceSyncIncomingCallStore(log) {
+    try {
+      const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
+      if (!IncomingCallStore) {
+        log("forceSyncIncomingCallStore: IncomingCallStore not found");
+        return;
+      }
+      
+      log("Forcing sync of IncomingCallStore...");
+      this.isForcingSync = true;
+
+      const modules = BdApi.Webpack.getModule(() => true, { first: false }) || [];
+      modules.forEach(m => {
+        const checkStore = (s) => {
+          if (s && s._syncWiths && Array.isArray(s._syncWiths)) {
+            s._syncWiths.forEach(sw => {
+              if (sw.store === IncomingCallStore && typeof sw.func === "function") {
+                log(`Calling sync callback: ${sw.func.name || "anonymous"} on store ${s.getName ? s.getName() : "Unknown"}`);
+                try {
+                  sw.func();
+                } catch(e) {
+                  log(`Error calling sync callback: ` + e.stack);
+                }
+              }
+            });
+          }
+        };
+        if (m && m.getName && typeof m.getName === "function") {
+          checkStore(m);
+        } else if (m && m.default && m.default.getName && typeof m.default.getName === "function") {
+          checkStore(m.default);
+        }
+      });
+      
+      this.isForcingSync = false;
+      IncomingCallStore.emitChange();
+      log("Forced sync complete.");
+    } catch(err) {
+      this.isForcingSync = false;
+      log("Error forcing sync: " + err.stack);
     }
   }
 
@@ -203,11 +270,20 @@ class BypassDND {
             return true;
           }
           
+          if (this.isForcingSync) {
+            log(`Bypassing DND because isForcingSync is true`);
+            return true;
+          }
+          
           if (isCallRinging()) {
             return true;
           }
           
           const stack = new Error().stack || "";
+          
+          // Log the stack trace to help diagnose why it isn't bypassing!
+          log(`shouldBypass check: source=${source}, res=${res}, stack:\n${stack}\n`);
+          
           let isBackground = 
             stack.includes("MESSAGE_CREATE") ||
             stack.includes("CALL_CREATE") ||
@@ -223,7 +299,7 @@ class BypassDND {
 
           if (!isBackground) {
             for (const name of this.syncCallbackNames) {
-              const regex = new RegExp(`\\bat ${name}\\b`);
+              const regex = new RegExp(`\\bat (?:\\w+\\.)*${name}\\b`);
               if (regex.test(stack)) {
                 isBackground = true;
                 break;
@@ -232,6 +308,7 @@ class BypassDND {
           }
 
           if (isBackground) {
+            log(`Bypassing DND for stack!`);
             return true;
           }
         }
