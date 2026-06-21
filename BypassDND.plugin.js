@@ -2,7 +2,7 @@
  * @name BypassDND
  * @author senkih
  * @description Bypasses Do Not Disturb (DND) status locally so you still receive notifications.
- * @version 3.0.1
+ * @version 3.0.2
  * @website https://github.com/kovalenkoalla026-arch/betterdiscord-plugins
  * @source https://github.com/kovalenkoalla026-arch/betterdiscord-plugins/blob/main/BypassDND.plugin.js
  */
@@ -101,41 +101,76 @@ class BypassDND {
       console.error("[BypassDND] Failed to get NotificationCheckModule", e);
     }
 
-    // 1. Patch local presence stores only if alwaysOnlineLocally is enabled
-    if (this.settings.alwaysOnlineLocally) {
-      const patchStore = (store, name) => {
-        if (!store || typeof store.getStatus !== "function") return;
-        try {
-          BdApi.Patcher.instead(this.meta.name, store, "getStatus", (thisObject, args, originalMethod) => {
-            const res = originalMethod.apply(thisObject, args);
-            const isSelf = name === "SelfPresenceStore" || (args[0] && args[0] === this.getCurrentUserId());
-            if (isSelf && (res === "dnd" || res === "idle")) {
-              return "online";
-            }
-            return res;
-          });
-        } catch(e) {
-          console.error(`[BypassDND] Error patching ${name}:`, e);
-        }
-      };
+    console.log("[BypassDND] SelfPresenceStore found:", !!SelfPresenceStore);
+    console.log("[BypassDND] UserStatusStore found:", !!UserStatusStore);
+    console.log("[BypassDND] PresenceStore found:", !!PresenceStore);
+    console.log("[BypassDND] NotificationCheckModule found:", !!NotificationCheckModule);
 
+    const shouldBypass = (res, args) => {
+      const isDnd = res === "dnd";
+      const isIdle = res === "idle";
+      
+      if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
+        if (this.settings.alwaysOnlineLocally) {
+          return true;
+        }
+        
+        const stack = new Error().stack || "";
+        const isBackground = 
+          stack.includes("MESSAGE_CREATE") ||
+          stack.includes("CALL_CREATE") ||
+          stack.includes("RING") ||
+          stack.includes("playSound") ||
+          stack.includes("PlaySound") ||
+          stack.includes("Sound") ||
+          stack.includes("Notification");
+
+        if (isBackground) {
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // 1. Patch local presence stores
+    const patchStore = (store, name) => {
+      if (!store || typeof store.getStatus !== "function") return;
+      try {
+        BdApi.Patcher.instead(this.meta.name, store, "getStatus", (thisObject, args, originalMethod) => {
+          const res = originalMethod.apply(thisObject, args);
+          const isSelf = name.includes("SelfPresenceStore") || (args[0] && args[0] === this.getCurrentUserId());
+          if (isSelf && shouldBypass(res, args)) {
+            return "online";
+          }
+          return res;
+        });
+      } catch(e) {
+        console.error(`[BypassDND] Error patching ${name}:`, e);
+      }
+    };
+
+    if (SelfPresenceStore) {
       patchStore(SelfPresenceStore, "SelfPresenceStore");
       patchStore(Object.getPrototypeOf(SelfPresenceStore), "SelfPresenceStore Prototype");
-      if (SelfPresenceStore?.default) {
+      if (SelfPresenceStore.default) {
         patchStore(SelfPresenceStore.default, "SelfPresenceStore Default");
         patchStore(Object.getPrototypeOf(SelfPresenceStore.default), "SelfPresenceStore Default Prototype");
       }
+    }
 
+    if (UserStatusStore) {
       patchStore(UserStatusStore, "UserStatusStore");
       patchStore(Object.getPrototypeOf(UserStatusStore), "UserStatusStore Prototype");
-      if (UserStatusStore?.default) {
+      if (UserStatusStore.default) {
         patchStore(UserStatusStore.default, "UserStatusStore Default");
         patchStore(Object.getPrototypeOf(UserStatusStore.default), "UserStatusStore Default Prototype");
       }
+    }
 
+    if (PresenceStore) {
       patchStore(PresenceStore, "PresenceStore");
       patchStore(Object.getPrototypeOf(PresenceStore), "PresenceStore Prototype");
-      if (PresenceStore?.default) {
+      if (PresenceStore.default) {
         patchStore(PresenceStore.default, "PresenceStore Default");
         patchStore(Object.getPrototypeOf(PresenceStore.default), "PresenceStore Default Prototype");
       }
@@ -155,6 +190,8 @@ class BypassDND {
           }
         }
 
+        console.log("[BypassDND] notifyCheckKey found:", notifyCheckKey);
+
         if (notifyCheckKey) {
           BdApi.Patcher.before(this.meta.name, NotificationCheckModule, notifyCheckKey, (thisObject, args) => {
             const currentStatus = SelfPresenceStore?.getStatus() || "online";
@@ -162,10 +199,18 @@ class BypassDND {
             const isIdle = currentStatus === "idle";
             
             if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
-              if (!args[3]) {
-                args[3] = {};
+              if (args.length < 4) {
+                while (args.length < 3) {
+                  args.push(undefined);
+                }
+                args.push({ ignoreStatus: true });
+              } else {
+                if (!args[3]) {
+                  args[3] = {};
+                }
+                args[3].ignoreStatus = true;
               }
-              args[3].ignoreStatus = true;
+              return args; // Return mutated arguments to target function
             }
           });
         }
