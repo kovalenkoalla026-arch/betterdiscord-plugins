@@ -21,6 +21,8 @@ class SmartStatus {
     this.currentStatus = null;
     this.isFocused = false;
     this.idleTimer = null;
+    this.pollTimer = null;
+    this.lastActivityTime = Date.now();
     
     // Bind listeners
     this.handleFocus = this.handleFocus.bind(this);
@@ -35,14 +37,46 @@ class SmartStatus {
   start() {
     console.log("[SmartStatus] Plugin starting...");
     this.isFocused = document.hasFocus();
+    this.lastActivityTime = Date.now();
     console.log(`[SmartStatus] Initial window focus state: ${this.isFocused}`);
+    
+    // Webpack scanning for idle-related modules
+    try {
+      console.log("[SmartStatus] Scanning Webpack for idle/presence/focus modules...");
+      const allModules = BdApi.Webpack.getAllModules() || [];
+      console.log(`[SmartStatus] Found ${allModules.length} total modules in Webpack.`);
+      for (let i = 0; i < allModules.length; i++) {
+        const m = allModules[i];
+        if (!m) continue;
+        
+        const keys = Object.keys(m);
+        const hasIdle = keys.some(k => k.toLowerCase().includes("idle"));
+        const hasPresence = keys.some(k => k.toLowerCase().includes("presence"));
+        const hasFocus = keys.some(k => k.toLowerCase().includes("focus"));
+        
+        if (hasIdle || hasPresence || hasFocus) {
+          const name = m.getName ? m.getName() : (m.default && m.default.getName ? m.default.getName() : "Unknown");
+          console.log(`[SmartStatus] Scan Match [${i}]: name=${name}, keys=${JSON.stringify(keys)}`);
+        }
+      }
+    } catch(e) {
+      console.error("[SmartStatus] Error scanning Webpack:", e);
+    }
+    
     this.setupListeners();
+
+    // Start periodic polling for system idle (every 5 seconds)
+    this.pollTimer = setInterval(() => {
+      this.updateState();
+    }, 5000);
+
     this.updateState();
   }
 
   stop() {
     console.log("[SmartStatus] Plugin stopping...");
     this.removeListeners();
+    if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.idleTimer) clearTimeout(this.idleTimer);
     // Reset to online when stopping the plugin
     this.setStatus("online");
@@ -217,8 +251,8 @@ class SmartStatus {
   }
 
   resetIdleTimer() {
+    this.lastActivityTime = Date.now();
     if (!this.isFocused) {
-      // If we got activity but window is blurred, update focus state
       this.isFocused = true;
     }
     this.updateState();
@@ -227,20 +261,41 @@ class SmartStatus {
   updateState() {
     if (this.idleTimer) clearTimeout(this.idleTimer);
 
-    if (!this.isFocused) {
-      // Blurred - another app is active on screen
-      this.setStatus(this.settings.inactiveStatus);
-    } else {
-      // Focused - Discord is active
-      this.setStatus(this.settings.activeStatus);
+    let isIdle = false;
+    let hasPowerMonitor = false;
+    let systemIdleTime = 0;
 
-      // Start idle timer
-      const delayMs = (this.settings.idleDelay || 2) * 60 * 1000;
-      this.idleTimer = setTimeout(() => {
-        if (this.isFocused) {
-          this.setStatus(this.settings.idleStatus);
-        }
-      }, delayMs);
+    try {
+      const electron = require("electron");
+      if (electron && electron.powerMonitor) {
+        systemIdleTime = electron.powerMonitor.getSystemIdleTime();
+        hasPowerMonitor = true;
+      }
+    } catch (e) {
+      // powerMonitor not available
+    }
+
+    const idleDelaySeconds = (this.settings.idleDelay || 2) * 60;
+
+    if (hasPowerMonitor) {
+      if (systemIdleTime >= idleDelaySeconds) {
+        isIdle = true;
+      }
+    } else {
+      const timeSinceLastActivity = (Date.now() - this.lastActivityTime) / 1000;
+      if (timeSinceLastActivity >= idleDelaySeconds) {
+        isIdle = true;
+      }
+    }
+
+    if (isIdle) {
+      this.setStatus(this.settings.idleStatus);
+    } else {
+      if (this.isFocused) {
+        this.setStatus(this.settings.activeStatus);
+      } else {
+        this.setStatus(this.settings.inactiveStatus);
+      }
     }
   }
 
