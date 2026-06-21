@@ -1,8 +1,8 @@
 /**
  * @name BypassDND
  * @author senkih
- * @description Bypasses Do Not Disturb (DND) status locally so you still receive notifications and incoming calls.
- * @version 2.3.3
+ * @description Bypasses Do Not Disturb (DND) status locally so you still receive notifications.
+ * @version 3.0.1
  * @website https://github.com/kovalenkoalla026-arch/betterdiscord-plugins
  * @source https://github.com/kovalenkoalla026-arch/betterdiscord-plugins/blob/main/BypassDND.plugin.js
  */
@@ -16,396 +16,132 @@ class BypassDND {
       alwaysOnlineLocally: false
     };
     this.settings = {};
-    this.cachedCurrentUserId = null;
-    this.syncCallbackNames = ["R", "O"];
   }
 
   load() {
     const saved = BdApi.Data.load(this.meta.name, "settings") || {};
     this.settings = Object.assign({}, this.defaultSettings, saved);
-    this.saveSettings();
-    console.log(`[${this.meta.name}] Loaded settings:`, JSON.stringify(this.settings));
   }
 
   start() {
-    const fs = require("fs");
-    const logFile = "C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\bypass_dnd_debug.txt";
-    const logs = [];
-    const log = (msg) => {
-      logs.push(`[${new Date().toISOString()}] ${msg}`);
-      try {
-        if (logs.length > 500) {
-          logs.shift();
-        }
-        fs.writeFileSync(logFile, logs.join("\n") + "\n", "utf8");
-      } catch(e) {}
-    };
-
-    try {
-      log("1. Start called");
-
-      this.findSyncCallbackNames(log);
-      log("2. Calling patchStatusAndNotificationModules");
-      this.patchStatusAndNotificationModules(log);
-      log("3. Finished patchStatusAndNotificationModules");
-      
-      log("4. Calling forceSyncIncomingCallStore");
-      this.forceSyncIncomingCallStore(log);
-      log("5. Finished forceSyncIncomingCallStore");
-    } catch(e) {
-      log("CRITICAL START ERROR: " + e.stack);
-    }
+    this.patchNotificationAndStatus();
   }
 
   stop() {
     BdApi.Patcher.unpatchAll(this.meta.name);
   }
 
-  findSyncCallbackNames(log) {
-    try {
-      const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
-      if (!IncomingCallStore) {
-        log("IncomingCallStore not found");
-        return;
-      }
-      
-      log("IncomingCallStore prototype keys: " + Object.getOwnPropertyNames(Object.getPrototypeOf(IncomingCallStore)).join(", "));
-      log("IncomingCallStore keys: " + Object.keys(IncomingCallStore).join(", "));
-      
-      if (IncomingCallStore._syncWiths && Array.isArray(IncomingCallStore._syncWiths)) {
-        log(`IncomingCallStore has ${IncomingCallStore._syncWiths.length} _syncWiths`);
-        IncomingCallStore._syncWiths.forEach((sw, idx) => {
-          const targetStoreName = sw.store ? (sw.store.getName ? sw.store.getName() : (sw.store.constructor ? sw.store.constructor.name : "Unknown")) : "None";
-          const funcName = sw.func ? sw.func.name : "anonymous";
-          const funcStr = sw.func ? sw.func.toString().substring(0, 500) : "undefined";
-          log(`_syncWiths[${idx}]: store=${targetStoreName}, funcName=${funcName}, funcStr=${funcStr}`);
-          if (funcName && funcName.length <= 3) {
-            this.syncCallbackNames.push(funcName);
-          }
-        });
-      }
-
-      // Also do the global scanning as a fallback/additional safety
-      const modules = BdApi.Webpack.getModule(() => true, { first: false }) || [];
-      modules.forEach(m => {
-        const checkStore = (s) => {
-          if (s && s._syncWiths && Array.isArray(s._syncWiths)) {
-            s._syncWiths.forEach((sw) => {
-              if (sw.store === IncomingCallStore && sw.func && sw.func.name) {
-                log(`Found sync callback name in other store: ${sw.func.name} in store ${s.getName ? s.getName() : "Unknown"}`);
-                this.syncCallbackNames.push(sw.func.name);
-              }
-            });
-          }
-        };
-        if (m && m.getName && typeof m.getName === "function") {
-          checkStore(m);
-        } else if (m && m.default && m.default.getName && typeof m.default.getName === "function") {
-          checkStore(m.default);
-        }
-      });
-      // Deduplicate
-      this.syncCallbackNames = Array.from(new Set(this.syncCallbackNames));
-      log("Final sync callback names: " + JSON.stringify(this.syncCallbackNames));
-    } catch(err) {
-      log("Error finding sync callback names: " + err.stack);
-    }
-  }
-
-  forceSyncIncomingCallStore(log) {
-    try {
-      const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
-      if (!IncomingCallStore) {
-        log("forceSyncIncomingCallStore: IncomingCallStore not found");
-        return;
-      }
-      
-      log("Forcing sync of IncomingCallStore...");
-      this.isForcingSync = true;
-
-      const modules = BdApi.Webpack.getModule(() => true, { first: false }) || [];
-      modules.forEach(m => {
-        const checkStore = (s) => {
-          if (s && s._syncWiths && Array.isArray(s._syncWiths)) {
-            s._syncWiths.forEach(sw => {
-              if (sw.store === IncomingCallStore && typeof sw.func === "function") {
-                log(`Calling sync callback: ${sw.func.name || "anonymous"} on store ${s.getName ? s.getName() : "Unknown"}`);
-                try {
-                  sw.func();
-                } catch(e) {
-                  log(`Error calling sync callback: ` + e.stack);
-                }
-              }
-            });
-          }
-        };
-        if (m && m.getName && typeof m.getName === "function") {
-          checkStore(m);
-        } else if (m && m.default && m.default.getName && typeof m.default.getName === "function") {
-          checkStore(m.default);
-        }
-      });
-      
-      this.isForcingSync = false;
-      IncomingCallStore.emitChange();
-      log("Forced sync complete.");
-    } catch(err) {
-      this.isForcingSync = false;
-      log("Error forcing sync: " + err.stack);
-    }
-  }
-
-  showToast(message, options) {
-    if (typeof BdApi !== "undefined" && BdApi.UI && typeof BdApi.UI.showToast === "function") {
-      BdApi.UI.showToast(message, options);
-    } else if (typeof BdApi !== "undefined" && typeof BdApi.showToast === "function") {
-      BdApi.showToast(message, options);
-    } else {
-      console.log(`[${this.meta.name}] Toast:`, message, options);
-    }
-  }
-
   getCurrentUserId() {
-    if (this.cachedCurrentUserId) return this.cachedCurrentUserId;
     try {
       const UserStore = BdApi.Webpack.getStore("UserStore") || BdApi.Webpack.getModule(m => (m.getCurrentUser && m.getUser) || (m.default && m.default.getCurrentUser && m.default.getUser));
       const currentUser = UserStore?.getCurrentUser?.() || UserStore?.default?.getCurrentUser?.();
-      if (currentUser) {
-        this.cachedCurrentUserId = currentUser.id;
-        return this.cachedCurrentUserId;
-      }
+      return currentUser?.id || null;
     } catch(e) {}
     return null;
   }
 
-  patchStatusAndNotificationModules(log) {
-    log("a. Entering patchStatusAndNotificationModules");
-    
+  patchNotificationAndStatus() {
     let SelfPresenceStore = null;
     try {
-      log("b. Fetching SelfPresenceStore");
-      SelfPresenceStore = BdApi.Webpack.getStore("SelfPresenceStore") || BdApi.Webpack.getModule(m => m.getName && m.getName() === "SelfPresenceStore" || (m.default && m.default.getName && m.default.getName() === "SelfPresenceStore"));
-      log("c. Fetched SelfPresenceStore: " + !!SelfPresenceStore);
+      SelfPresenceStore = BdApi.Webpack.getStore("SelfPresenceStore") || BdApi.Webpack.getModule(m => {
+        try {
+          if (m && m.getName && m.getName() === "SelfPresenceStore") return true;
+          if (m && m.default && m.default.getName && m.default.getName() === "SelfPresenceStore") return true;
+        } catch(e) {}
+        return false;
+      });
     } catch(e) {
-      log("Error fetching SelfPresenceStore: " + e.stack);
+      console.error("[BypassDND] Failed to get SelfPresenceStore", e);
     }
 
     let UserStatusStore = null;
     try {
-      log("d. Fetching UserStatusStore");
-      UserStatusStore = BdApi.Webpack.getStore("UserStatusStore") || BdApi.Webpack.getModule(m => (m.getStatus && m.isMobileOnline) || (m.default && m.default.getStatus && m.default.isMobileOnline));
-      log("e. Fetched UserStatusStore: " + !!UserStatusStore);
+      UserStatusStore = BdApi.Webpack.getStore("UserStatusStore") || BdApi.Webpack.getModule(m => {
+        try {
+          if (m && m.getStatus && m.isMobileOnline) return true;
+          if (m && m.default && m.default.getStatus && m.default.isMobileOnline) return true;
+        } catch(e) {}
+        return false;
+      });
     } catch(e) {
-      log("Error fetching UserStatusStore: " + e.stack);
+      console.error("[BypassDND] Failed to get UserStatusStore", e);
     }
 
     let PresenceStore = null;
     try {
-      log("f. Fetching PresenceStore");
-      PresenceStore = BdApi.Webpack.getStore("PresenceStore") || BdApi.Webpack.getModule(m => m.getName && m.getName() === "PresenceStore" || (m.default && m.default.getName && m.default.getName() === "PresenceStore"));
-      log("g. Fetched PresenceStore: " + !!PresenceStore);
+      PresenceStore = BdApi.Webpack.getStore("PresenceStore") || BdApi.Webpack.getModule(m => {
+        try {
+          if (m && m.getName && m.getName() === "PresenceStore") return true;
+          if (m && m.default && m.default.getName && m.default.getName() === "PresenceStore") return true;
+        } catch(e) {}
+        return false;
+      });
     } catch(e) {
-      log("Error fetching PresenceStore: " + e.stack);
+      console.error("[BypassDND] Failed to get PresenceStore", e);
     }
 
     let NotificationCheckModule = null;
     try {
-      log("h. Fetching NotificationCheckModule");
       NotificationCheckModule = BdApi.Webpack.getModule(m => {
-        for (const key in m) {
-          if (typeof m[key] === "function") {
-            const str = m[key].toString();
-            if (str.includes("ignoreStatus") && str.includes("allowNoMessages") && str.includes("isLurking")) {
-              return true;
-            }
+        try {
+          for (const key in m) {
+            try {
+              if (m[key] && typeof m[key] === "function") {
+                const str = m[key].toString();
+                if (str.includes("ignoreStatus") && str.includes("allowNoMessages") && str.includes("isLurking")) {
+                  return true;
+                }
+              }
+            } catch(e) {}
           }
-        }
+        } catch(e) {}
         return false;
       });
-      log("i. Fetched NotificationCheckModule: " + !!NotificationCheckModule);
     } catch(e) {
-      log("Error fetching NotificationCheckModule: " + e.stack);
+      console.error("[BypassDND] Failed to get NotificationCheckModule", e);
     }
 
-    let lastDiagLog = 0;
-    const isCallRinging = () => {
-      try {
-        const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
-        const CallStore = BdApi.Webpack.getStore("CallStore");
-
-        const hasInc = IncomingCallStore && typeof IncomingCallStore.hasIncomingCalls === "function" ? IncomingCallStore.hasIncomingCalls() : false;
-        const incCalls = IncomingCallStore && typeof IncomingCallStore.getIncomingCalls === "function" ? IncomingCallStore.getIncomingCalls() : null;
-        const rawCalls = CallStore && typeof CallStore.getCalls === "function" ? CallStore.getCalls() : null;
-
-        const now = Date.now();
-        if (now - lastDiagLog > 3000 || hasInc || (rawCalls && Object.keys(rawCalls).length > 0)) {
-          lastDiagLog = now;
-          log(`isCallRinging DIAG: hasIncomingCalls = ${hasInc}, getIncomingCalls = ${JSON.stringify(incCalls)}, getCalls = ${JSON.stringify(rawCalls)}`);
-        }
-
-        if (hasInc) {
-          log("isCallRinging: IncomingCallStore has incoming calls");
-          return true;
-        }
-        
-        if (rawCalls) {
-          const callsList = Array.isArray(rawCalls) ? rawCalls : Object.values(rawCalls);
-          if (callsList.length > 0) {
-            log("isCallRinging: CallStore has active/ringing call");
-            return true;
-          }
-        }
-      } catch(e) {
-        log("isCallRinging error: " + e.stack);
-      }
-      return false;
-    };
-
-    const shouldBypass = (res, args, source) => {
-      const isDnd = res === "dnd";
-      const isIdle = res === "idle";
-      
-      if (isDnd || isIdle) {
-        if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
-          if (this.settings.alwaysOnlineLocally) {
-            return true;
-          }
-          
-          if (this.isForcingSync) {
-            log(`Bypassing DND because isForcingSync is true`);
-            return true;
-          }
-          
-          if (isCallRinging()) {
-            return true;
-          }
-          
-          const stack = new Error().stack || "";
-          
-          // Log the stack trace to help diagnose why it isn't bypassing!
-          log(`shouldBypass check: source=${source}, res=${res}, stack:\n${stack}\n`);
-          
-          let isBackground = 
-            stack.includes("MESSAGE_CREATE") ||
-            stack.includes("CALL_CREATE") ||
-            stack.includes("VOICE_STATE_UPDATE") ||
-            stack.includes("CALL_UPDATE") ||
-            stack.includes("RING") ||
-            stack.includes("playSound") ||
-            stack.includes("PlaySound") ||
-            stack.includes("Sound") ||
-            stack.includes("Notification") ||
-            stack.includes("IncomingCallStore") ||
-            stack.includes("syncWith");
-
-          if (!isBackground) {
-            for (const name of this.syncCallbackNames) {
-              const regex = new RegExp(`\\bat (?:\\w+\\.)*${name}\\b`);
-              if (regex.test(stack)) {
-                isBackground = true;
-                break;
-              }
-            }
-          }
-
-          if (isBackground) {
-            log(`Bypassing DND for stack!`);
-            return true;
-          }
-        }
-      }
-      return false;
-    };
-
-    // Patch SelfPresenceStore getStatus
-    if (SelfPresenceStore) {
-      const patchSelfPresenceStatus = (target, name) => {
-        if (!target || typeof target.getStatus !== "function") return;
-        log(`Patching SelfPresenceStore getStatus on ${name}`);
+    // 1. Patch local presence stores only if alwaysOnlineLocally is enabled
+    if (this.settings.alwaysOnlineLocally) {
+      const patchStore = (store, name) => {
+        if (!store || typeof store.getStatus !== "function") return;
         try {
-          BdApi.Patcher.instead(this.meta.name, target, "getStatus", (thisObject, args, originalMethod) => {
+          BdApi.Patcher.instead(this.meta.name, store, "getStatus", (thisObject, args, originalMethod) => {
             const res = originalMethod.apply(thisObject, args);
-            if (shouldBypass(res, args, `SelfPresenceStore (${name})`)) {
+            const isSelf = name === "SelfPresenceStore" || (args[0] && args[0] === this.getCurrentUserId());
+            if (isSelf && (res === "dnd" || res === "idle")) {
               return "online";
             }
             return res;
           });
-        } catch(err) {
-          log(`Error patching SelfPresenceStore ${name}: ` + err.stack);
+        } catch(e) {
+          console.error(`[BypassDND] Error patching ${name}:`, e);
         }
       };
 
-      patchSelfPresenceStatus(SelfPresenceStore, "Store");
-      patchSelfPresenceStatus(Object.getPrototypeOf(SelfPresenceStore), "Prototype");
-      if (SelfPresenceStore.default) {
-        patchSelfPresenceStatus(SelfPresenceStore.default, "Default");
-        patchSelfPresenceStatus(Object.getPrototypeOf(SelfPresenceStore.default), "Default Prototype");
+      patchStore(SelfPresenceStore, "SelfPresenceStore");
+      patchStore(Object.getPrototypeOf(SelfPresenceStore), "SelfPresenceStore Prototype");
+      if (SelfPresenceStore?.default) {
+        patchStore(SelfPresenceStore.default, "SelfPresenceStore Default");
+        patchStore(Object.getPrototypeOf(SelfPresenceStore.default), "SelfPresenceStore Default Prototype");
+      }
+
+      patchStore(UserStatusStore, "UserStatusStore");
+      patchStore(Object.getPrototypeOf(UserStatusStore), "UserStatusStore Prototype");
+      if (UserStatusStore?.default) {
+        patchStore(UserStatusStore.default, "UserStatusStore Default");
+        patchStore(Object.getPrototypeOf(UserStatusStore.default), "UserStatusStore Default Prototype");
+      }
+
+      patchStore(PresenceStore, "PresenceStore");
+      patchStore(Object.getPrototypeOf(PresenceStore), "PresenceStore Prototype");
+      if (PresenceStore?.default) {
+        patchStore(PresenceStore.default, "PresenceStore Default");
+        patchStore(Object.getPrototypeOf(PresenceStore.default), "PresenceStore Default Prototype");
       }
     }
 
-    // Patch UserStatusStore getStatus
-    if (UserStatusStore) {
-      const patchUserStatus = (target, name) => {
-        if (!target || typeof target.getStatus !== "function") return;
-        log(`Patching UserStatusStore getStatus on ${name}`);
-        try {
-          BdApi.Patcher.instead(this.meta.name, target, "getStatus", (thisObject, args, originalMethod) => {
-            const res = originalMethod.apply(thisObject, args);
-            const userId = args[0];
-            const currentUserId = this.getCurrentUserId();
-            
-            if (userId && currentUserId && userId === currentUserId) {
-              if (shouldBypass(res, args, `UserStatusStore (${name})`)) {
-                return "online";
-              }
-            }
-            return res;
-          });
-        } catch(err) {
-          log(`Error patching UserStatusStore ${name}: ` + err.stack);
-        }
-      };
-
-      patchUserStatus(UserStatusStore, "Store");
-      patchUserStatus(Object.getPrototypeOf(UserStatusStore), "Prototype");
-      if (UserStatusStore.default) {
-        patchUserStatus(UserStatusStore.default, "Default");
-        patchUserStatus(Object.getPrototypeOf(UserStatusStore.default), "Default Prototype");
-      }
-    }
-
-    // Patch PresenceStore getStatus
-    if (PresenceStore) {
-      const patchPresenceStatus = (target, name) => {
-        if (!target || typeof target.getStatus !== "function") return;
-        log(`Patching PresenceStore getStatus on ${name}`);
-        try {
-          BdApi.Patcher.instead(this.meta.name, target, "getStatus", (thisObject, args, originalMethod) => {
-            const res = originalMethod.apply(thisObject, args);
-            const userId = args[0];
-            const currentUserId = this.getCurrentUserId();
-            
-            if (userId && currentUserId && userId === currentUserId) {
-              if (shouldBypass(res, args, `PresenceStore (${name})`)) {
-                return "online";
-              }
-            }
-            return res;
-          });
-        } catch(err) {
-          log(`Error patching PresenceStore ${name}: ` + err.stack);
-        }
-      };
-
-      patchPresenceStatus(PresenceStore, "Store");
-      patchPresenceStatus(Object.getPrototypeOf(PresenceStore), "Prototype");
-      if (PresenceStore.default) {
-        patchPresenceStatus(PresenceStore.default, "Default");
-        patchPresenceStatus(Object.getPrototypeOf(PresenceStore.default), "Default Prototype");
-      }
-    }
-
-    // Patch Notification Check Module
+    // 2. Patch NotificationCheckModule to bypass status constraints for notifications
     if (NotificationCheckModule) {
       try {
         let notifyCheckKey = null;
@@ -420,20 +156,27 @@ class BypassDND {
         }
 
         if (notifyCheckKey) {
-          log(`Patching NotificationCheckModule key: ${notifyCheckKey}`);
           BdApi.Patcher.before(this.meta.name, NotificationCheckModule, notifyCheckKey, (thisObject, args) => {
-            if (!args[3]) {
-              args[3] = {};
+            const currentStatus = SelfPresenceStore?.getStatus() || "online";
+            const isDnd = currentStatus === "dnd";
+            const isIdle = currentStatus === "idle";
+            
+            if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
+              if (!args[3]) {
+                args[3] = {};
+              }
+              args[3].ignoreStatus = true;
             }
-            args[3].ignoreStatus = true;
           });
         }
       } catch(err) {
-        log(`Error patching NotificationCheckModule: ` + err.stack);
+        console.error("[BypassDND] Error patching NotificationCheckModule:", err);
       }
     }
 
-    this.showToast(`BypassDND запущен!`, { type: "success" });
+    if (typeof BdApi !== "undefined" && BdApi.UI && typeof BdApi.UI.showToast === "function") {
+      BdApi.UI.showToast("BypassDND запущен!", { type: "success" });
+    }
   }
 
   getSettingsPanel() {
@@ -482,13 +225,13 @@ class BypassDND {
     container.appendChild(createCheckbox(this.settings.bypassDnd, (val) => {
       this.settings.bypassDnd = val;
       this.saveSettings();
-    }, "Обходить статус \"Не беспокоить\" (DND)"));
+    }, "Обходить статус \"Не беспокоить\" (DND) для уведомлений"));
 
     // Setting 2: Bypass Idle
     container.appendChild(createCheckbox(this.settings.bypassIdle, (val) => {
       this.settings.bypassIdle = val;
       this.saveSettings();
-    }, "Также обходить статус \"Неактивен\" (Idle) для звуков"));
+    }, "Также обходить статус \"Неактивен\" (Idle) для уведомлений"));
 
     // Setting 3: Always Online Locally
     container.appendChild(createCheckbox(this.settings.alwaysOnlineLocally, (val) => {
