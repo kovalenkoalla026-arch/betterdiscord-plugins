@@ -34,6 +34,31 @@ class BypassDND {
     BdApi.Patcher.unpatchAll(this.meta.name);
   }
 
+  isCallRinging() {
+    try {
+      const CallStore = BdApi.Webpack.getModule(m => m.getParticipant || (m.default && m.default.getParticipant));
+      if (!CallStore) return false;
+      const target = CallStore.$$baseObject || CallStore;
+      const channels = target.getChannels();
+      if (!channels) return false;
+      
+      const channelIds = Object.keys(channels);
+      for (const channelId of channelIds) {
+        const participants = target.getMutableParticipants(channelId);
+        if (participants) {
+          for (const p of participants) {
+            if (p && p.ringing) {
+              return true;
+            }
+          }
+        }
+      }
+    } catch(e) {
+      console.error("[BypassDND] Error in isCallRinging:", e);
+    }
+    return false;
+  }
+
   showToast(message, options) {
     if (typeof BdApi !== "undefined" && BdApi.UI && typeof BdApi.UI.showToast === "function") {
       BdApi.UI.showToast(message, options);
@@ -82,6 +107,10 @@ class BypassDND {
         
         if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
           if (this.settings.alwaysOnlineLocally) {
+            return true;
+          }
+          
+          if (this.isCallRinging()) {
             return true;
           }
           
