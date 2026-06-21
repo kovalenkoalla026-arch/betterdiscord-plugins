@@ -266,10 +266,15 @@ class SmartStatus {
     let systemIdleTime = 0;
 
     try {
-      const electron = require("electron");
-      if (electron && electron.powerMonitor) {
-        systemIdleTime = electron.powerMonitor.getSystemIdleTime();
+      if (typeof window !== "undefined" && window.DiscordNative && window.DiscordNative.powerMonitor && typeof window.DiscordNative.powerMonitor.getSystemIdleTimeMs === "function") {
+        systemIdleTime = window.DiscordNative.powerMonitor.getSystemIdleTimeMs() / 1000;
         hasPowerMonitor = true;
+      } else {
+        const electron = require("electron");
+        if (electron && electron.powerMonitor) {
+          systemIdleTime = electron.powerMonitor.getSystemIdleTime();
+          hasPowerMonitor = true;
+        }
       }
     } catch (e) {
       // powerMonitor not available
