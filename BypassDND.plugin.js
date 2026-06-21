@@ -97,15 +97,47 @@ class BypassDND {
       if (!CallStore) return false;
       const target = CallStore.$$baseObject || CallStore;
       const channels = target.getChannels();
-      if (!channels) return false;
       
-      const channelIds = Object.keys(channels);
-      for (const channelId of channelIds) {
-        const participants = target.getMutableParticipants(channelId);
-        if (participants) {
-          for (const p of participants) {
-            if (p && p.ringing) {
-              return true;
+      let debugInfo = {
+        hasChannels: !!channels,
+        channelsType: typeof channels,
+        channelsKeys: channels ? Object.keys(channels) : [],
+        channelsDetails: {}
+      };
+
+      if (channels) {
+        const channelIds = Object.keys(channels);
+        for (const channelId of channelIds) {
+          const partsNoArg = target.getMutableParticipants(channelId);
+          const parts0 = target.getMutableParticipants(channelId, 0); 
+          const parts1 = target.getMutableParticipants(channelId, 1);
+          
+          debugInfo.channelsDetails[channelId] = {
+            partsNoArg: partsNoArg,
+            parts0: parts0,
+            parts1: parts1
+          };
+        }
+      }
+      
+      const fs = require("fs");
+      fs.writeFileSync("C:\\Users\\Senk\\.gemini\\antigravity-ide\\scratch\\call_store_state.txt", JSON.stringify(debugInfo, null, 2), "utf8");
+
+      if (channels) {
+        for (const channelId of Object.keys(channels)) {
+          const lists = [
+            target.getMutableParticipants(channelId),
+            target.getMutableParticipants(channelId, 0),
+            target.getMutableParticipants(channelId, 1)
+          ];
+          for (const list of lists) {
+            if (list) {
+              const arr = Array.isArray(list) ? list : Object.values(list);
+              for (const p of arr) {
+                if (p && p.ringing) {
+                  return true;
+                }
+              }
             }
           }
         }
