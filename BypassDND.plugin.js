@@ -2,7 +2,7 @@
  * @name BypassDND
  * @author senkih
  * @description Bypasses Do Not Disturb (DND) status locally so you still receive notifications and incoming calls.
- * @version 2.3.1
+ * @version 2.3.3
  * @website https://github.com/kovalenkoalla026-arch/betterdiscord-plugins
  * @source https://github.com/kovalenkoalla026-arch/betterdiscord-plugins/blob/main/BypassDND.plugin.js
  */
@@ -17,6 +17,7 @@ class BypassDND {
     };
     this.settings = {};
     this.cachedCurrentUserId = null;
+    this.syncCallbackNames = ["R", "O"];
   }
 
   load() {
@@ -42,6 +43,7 @@ class BypassDND {
 
     try {
       log("1. Start called");
+      this.findSyncCallbackNames(log);
       log("2. Calling patchStatusAndNotificationModules");
       this.patchStatusAndNotificationModules(log);
       log("3. Finished patchStatusAndNotificationModules");
@@ -52,6 +54,37 @@ class BypassDND {
 
   stop() {
     BdApi.Patcher.unpatchAll(this.meta.name);
+  }
+
+  findSyncCallbackNames(log) {
+    try {
+      const IncomingCallStore = BdApi.Webpack.getStore("IncomingCallStore");
+      if (!IncomingCallStore) return;
+      
+      const modules = BdApi.Webpack.getModule(() => true, { first: false }) || [];
+      modules.forEach(m => {
+        const checkStore = (s) => {
+          if (s && s._syncWiths && Array.isArray(s._syncWiths)) {
+            s._syncWiths.forEach((sw) => {
+              if (sw.store === IncomingCallStore && sw.func && sw.func.name) {
+                log(`Found sync callback name: ${sw.func.name} in store ${s.getName ? s.getName() : "Unknown"}`);
+                this.syncCallbackNames.push(sw.func.name);
+              }
+            });
+          }
+        };
+        if (m && m.getName && typeof m.getName === "function") {
+          checkStore(m);
+        } else if (m && m.default && m.default.getName && typeof m.default.getName === "function") {
+          checkStore(m.default);
+        }
+      });
+      // Deduplicate
+      this.syncCallbackNames = Array.from(new Set(this.syncCallbackNames));
+      log("Final sync callback names: " + JSON.stringify(this.syncCallbackNames));
+    } catch(err) {
+      log("Error finding sync callback names: " + err.stack);
+    }
   }
 
   showToast(message, options) {
@@ -164,31 +197,43 @@ class BypassDND {
       const isDnd = res === "dnd";
       const isIdle = res === "idle";
       
-      if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
-        if (this.settings.alwaysOnlineLocally) {
-          return true;
-        }
-        
-        if (isCallRinging()) {
-          log(`shouldBypass call from ${source}: res = ${res}, args = ${JSON.stringify(args)} -> BYPASSED (call ringing)`);
-          return true;
-        }
-        
-        const stack = new Error().stack || "";
-        const isBackground = 
-          stack.includes("MESSAGE_CREATE") ||
-          stack.includes("CALL_CREATE") ||
-          stack.includes("VOICE_STATE_UPDATE") ||
-          stack.includes("CALL_UPDATE") ||
-          stack.includes("RING") ||
-          stack.includes("playSound") ||
-          stack.includes("PlaySound") ||
-          stack.includes("Sound") ||
-          stack.includes("Notification");
+      if (isDnd || isIdle) {
+        if ((isDnd && this.settings.bypassDnd) || (isIdle && this.settings.bypassIdle)) {
+          if (this.settings.alwaysOnlineLocally) {
+            return true;
+          }
+          
+          if (isCallRinging()) {
+            return true;
+          }
+          
+          const stack = new Error().stack || "";
+          let isBackground = 
+            stack.includes("MESSAGE_CREATE") ||
+            stack.includes("CALL_CREATE") ||
+            stack.includes("VOICE_STATE_UPDATE") ||
+            stack.includes("CALL_UPDATE") ||
+            stack.includes("RING") ||
+            stack.includes("playSound") ||
+            stack.includes("PlaySound") ||
+            stack.includes("Sound") ||
+            stack.includes("Notification") ||
+            stack.includes("IncomingCallStore") ||
+            stack.includes("syncWith");
 
-        if (isBackground) {
-          log(`shouldBypass call from ${source}: res = ${res}, args = ${JSON.stringify(args)} -> BYPASSED (background stack match)`);
-          return true;
+          if (!isBackground) {
+            for (const name of this.syncCallbackNames) {
+              const regex = new RegExp(`\\bat ${name}\\b`);
+              if (regex.test(stack)) {
+                isBackground = true;
+                break;
+              }
+            }
+          }
+
+          if (isBackground) {
+            return true;
+          }
         }
       }
       return false;
