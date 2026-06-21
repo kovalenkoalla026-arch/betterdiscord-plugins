@@ -1,6 +1,6 @@
 /**
  * @name SmartStatus
- * @author Antigravity
+ * @author senkih
  * @description Automatically changes your status based on focus and activity.
  * @version 1.0.0
  * @website https://github.com/kovalenkoalla026-arch/betterdiscord-plugins
@@ -190,6 +190,8 @@ class SmartStatus {
         const option = document.createElement("option");
         option.value = opt.value;
         option.innerText = opt.label;
+        option.style.backgroundColor = "#2b2d31";
+        option.style.color = "#dbdee1";
         if (opt.value === value) option.selected = true;
         select.appendChild(option);
       });

@@ -14,3 +14,7 @@ Repository containing custom BetterDiscord plugins:
 
 3. **SmartStatus** ([SmartStatus.plugin.js](SmartStatus.plugin.js))
    - Automatically switches your network status (Online, DND, Idle) based on Discord window focus and user activity.
+
+4. **BypassDND** ([BypassDND.plugin.js](BypassDND.plugin.js))
+   - Bypasses Do Not Disturb (DND) status locally so you still receive notifications and incoming calls while keeping your status correct for others.
+

@@ -1,6 +1,6 @@
 /**
  * @name BetterGuildTooltip
- * @author DevilBro, Antigravity
+ * @author DevilBro, senkih
  * @version 1.0.1
  * @description Displays the online and total member count directly in the server tooltip.
  * @invite Jx3TjNS

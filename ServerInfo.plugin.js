@@ -2,7 +2,7 @@
  * @name ServerInfo
  * @description Показывает подробную информацию о сервере (профиль сервера) в красивом всплывающем окне в стиле Vencord.
  * @version 1.0.8
- * @author Antigravity
+ * @author senkih
  * @website https://github.com/vencord/discord-plugins
  */
 
